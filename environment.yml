@@ -1,0 +1,16 @@
+name: tag-photochat
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - matplotlib
+  - pytorch
+  - torchvision
+  - pip:
+      - transformers
+      - pillow
+      - tqdm
+      - opencv-python

@@ -1,0 +1,24 @@
+# environments
+.venv/
+env/
+venv/
+
+# python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# mac
+.DS_Store
+__MACOSX/
+
+# data / caches (DO NOT COMMIT)
+data/
+hf_data/
+photochat_hf/
+
+# outputs (DO NOT COMMIT)
+outputs/
+
+# logs
+*.log
