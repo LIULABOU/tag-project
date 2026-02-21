@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from transformers import CLIPModel, CLIPImageProcessor, CLIPTokenizer
 from src.dataloaders.photochat import PhotoChatDataset, collate_fn
-from src.models.alignment import AlignmentHead
+from src.models.alignment import AlignmentHead, evidence_dynamics
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_NAME = "openai/clip-vit-base-patch32"
@@ -93,9 +93,8 @@ def main():
     img_processor = CLIPImageProcessor.from_pretrained(MODEL_NAME)
     tokenizer = CLIPTokenizer.from_pretrained(MODEL_NAME)
 
-    # ----- Alignment module (moved out of this script!) -----
     align = AlignmentHead(h_dim=512, v_dim=768, q_dim=768).to(DEVICE)
-    align.eval()  # sanity script: not training
+    align.eval()
 
     summary_rows = []
     num_done = 0
@@ -139,29 +138,50 @@ def main():
 
         # ----- Compute per-turn alignment + attention using AlignmentHead -----
         with torch.no_grad():
-            a_t, e_hat = align(h_all, v_cls, v_patches)          # a_t:[T], e_hat:[T,49]
+            a_t, e_hat = align(h_all, v_cls, v_patches)          # a_t:[T], e_hat:[T,N]
+            e_final = evidence_dynamics(e_hat, rho=0.1)          # e_t dynamics, fixed rho=0.1
 
         a_arr = a_t.detach().cpu().numpy().astype(np.float32)
         check_no_nan(a_arr, "a_t")
         save_alignment_plot(a_arr, os.path.join(ex_dir, "alignment_trajectory.png"))
+        e_hat_np = e_hat.detach().cpu().numpy().astype(np.float32)     # [T, N]
+        e_fin_np = e_final.detach().cpu().numpy().astype(np.float32)   # [T, N]
 
-        # ----- Heatmaps per turn -----
-        e_np = e_hat.detach().cpu().numpy()
-        num_patches = e_np.shape[1]
+        num_patches = e_hat_np.shape[1]
         grid = infer_patch_grid(num_patches)
         uniform_max = 1.0 / num_patches
 
+        # ----- Heatmaps per turn (RAW + FINAL) -----
         for t in range(T):
-            attn = e_np[t]
-            attn = attn / (attn.sum() + 1e-9)
-            check_no_nan(attn, f"e_hat turn {t}")
+            # ---------- RAW (utterance-only) evidence: e_hat ----------
+            attn_hat = e_hat_np[t]
+            attn_hat = attn_hat / (attn_hat.sum() + 1e-9)
 
-            mx, ent = attention_stats(attn)
-            summary_rows.append([meta["photo_id"], t, float(a_arr[t]), mx, ent, uniform_max])
+            mx_hat, ent_hat = attention_stats(attn_hat)
+            check_no_nan(attn_hat, f"e_hat turn {t}")
 
-            hm = attn.reshape(grid, grid)
-            hm = (hm - hm.min()) / (hm.max() - hm.min() + 1e-9)
-            overlay_heatmap(pil_img, hm, os.path.join(ex_dir, f"turn_{t:02d}_heatmap.png"))
+            hm_hat = attn_hat.reshape(grid, grid)
+            hm_hat = (hm_hat - hm_hat.min()) / (hm_hat.max() - hm_hat.min() + 1e-9)
+            overlay_heatmap(pil_img, hm_hat, os.path.join(ex_dir, f"turn_{t:02d}_heatmap_hat.png"))
+
+            # ---------- FINAL evidence after dynamics: e_t ----------
+            attn_fin = e_fin_np[t]
+            attn_fin = attn_fin / (attn_fin.sum() + 1e-9)
+
+            mx_fin, ent_fin = attention_stats(attn_fin)
+            check_no_nan(attn_fin, f"e_final turn {t}")
+
+            hm_fin = attn_fin.reshape(grid, grid)
+            hm_fin = (hm_fin - hm_fin.min()) / (hm_fin.max() - hm_fin.min() + 1e-9)
+            overlay_heatmap(pil_img, hm_fin, os.path.join(ex_dir, f"turn_{t:02d}_heatmap_final.png"))
+
+            # Log both in summary
+            summary_rows.append([
+                meta["photo_id"], t, float(a_arr[t]),
+                mx_hat, ent_hat,
+                mx_fin, ent_fin,
+                uniform_max
+            ])
 
         # Save turns for reference
         with open(os.path.join(ex_dir, "turns.txt"), "w", encoding="utf-8") as f:
@@ -180,7 +200,12 @@ def main():
     csv_path = os.path.join(args.out_dir, "summary.csv")
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["photo_id", "turn", "a_t", "attn_max", "attn_entropy", "uniform_max"])
+        w.writerow([
+            "photo_id", "turn", "a_t",
+            "hat_max", "hat_entropy",
+            "final_max", "final_entropy",
+            "uniform_max"
+        ])
         w.writerows(summary_rows)
 
     print("\nDONE")

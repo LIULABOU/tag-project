@@ -57,3 +57,39 @@ class AlignmentHead(nn.Module):
         a = torch.sigmoid(self.W_a(x)).squeeze(-1)
 
         return a, e_hat
+
+@torch.no_grad()
+def evidence_dynamics(e_hat: torch.Tensor, rho: float = 0.1, e0: torch.Tensor | None = None) -> torch.Tensor:
+    """
+    Implements: e_t = (1-rho) e_{t-1} + rho * e_hat_t
+    Args:
+      e_hat: [T, N] raw evidence distributions (each row ~ sums to 1)
+      rho: fixed repair gate (prof said 0.1)
+      e0: optional initial evidence distribution [N]. If None, uniform prior.
+    Returns:
+      e: [T, N] final evidence distribution per turn
+    """
+    assert e_hat.dim() == 2, f"Expected e_hat [T,N], got {tuple(e_hat.shape)}"
+    T, N = e_hat.shape
+    device = e_hat.device
+
+    rho_t = torch.tensor(rho, device=device).clamp(0.0, 1.0)
+
+    if e0 is None:
+        e_prev = torch.full((N,), 1.0 / N, device=device)
+    else:
+        e_prev = e0.to(device)
+
+    e_out = []
+    for t in range(T):
+        # safety: keep it a proper distribution
+        x = torch.clamp(e_hat[t], min=0.0)
+        x = x / (x.sum() + 1e-12)
+
+        e_t = (1.0 - rho_t) * e_prev + rho_t * x
+        e_t = e_t / (e_t.sum() + 1e-12)
+
+        e_out.append(e_t)
+        e_prev = e_t
+
+    return torch.stack(e_out, dim=0)  # [T, N]
