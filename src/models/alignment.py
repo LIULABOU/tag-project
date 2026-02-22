@@ -23,7 +23,7 @@ class AlignmentHead(nn.Module):
 
     def __init__(self, h_dim=512, v_dim=768, q_dim=768, bias_a=True):
         super().__init__()
-        self.W_h = nn.Linear(h_dim, q_dim, bias=False)
+        self.Wa_text = nn.Linear(h_dim, q_dim, bias=False)  # TEXT -> Wa (query)
         self.W_a = nn.Linear(q_dim + v_dim + v_dim, 1, bias=bias_a)  # [q_t; c_t; v_cls] -> 1
 
     def forward(self, h_all: torch.Tensor, v_cls: torch.Tensor, v_patches: torch.Tensor):
@@ -36,7 +36,7 @@ class AlignmentHead(nn.Module):
           e: [T, N]
         """
         # q_all: [T, 768]
-        q_all = self.W_h(h_all)
+        q_all = self.Wa_text(h_all)
 
         # scores: [T, N] where scores[t,i] = v_patches[i] dot q_all[t]
         scores = torch.matmul(q_all, v_patches.t())  # [T, N]
