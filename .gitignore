@@ -22,3 +22,13 @@ outputs/
 
 # logs
 *.log
+
+# local artifacts
+.DS_Store
+__pycache__/
+*.pyc
+outputs*/
+venv*/
+data/photochat
+.mypy_cache/
+.pytest_cache/

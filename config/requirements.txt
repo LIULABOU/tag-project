@@ -1,0 +1,23 @@
+# Runtime used for this project:
+#   Python 3.11.13
+#   PyTorch 2.11.0+cu128
+#
+# For CUDA 12.8 PyTorch wheels, install with:
+#   pip install --extra-index-url https://download.pytorch.org/whl/cu128 -r config/requirements.txt
+
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+torchaudio==2.11.0+cu128
+transformers==5.5.3
+accelerate==1.13.0
+tokenizers==0.22.2
+safetensors==0.7.0
+huggingface-hub==1.10.1
+
+numpy==2.4.3
+scipy==1.17.1
+scikit-learn==1.8.0
+matplotlib==3.10.8
+pillow==12.1.1
+tqdm==4.67.3
+PyYAML==6.0.3

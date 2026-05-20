@@ -53,6 +53,7 @@ class MVPAligner(nn.Module):
         return torch.sigmoid(self.head(x)).squeeze()
 
 
+# Backward-compat alias: the new module is conceptually a RepairGate.
 RepairGate = MVPAligner
 
 

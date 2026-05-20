@@ -33,12 +33,7 @@ import torch
 from torch.utils.data import DataLoader
 from PIL import Image
 
-from src.dataloaders.photochat import (
-    TURN_WINDOW_CHOICES,
-    TURN_WINDOW_FULL,
-    PhotoChatDataset,
-    collate_fn,
-)
+from src.dataloaders.photochat import PhotoChatDataset, collate_fn
 from src.models.clip_model import CLIPBackbone
 from src.models.alignment import AlignmentHead
 from src.models.mvp_aligner import MVPAligner, DCPGate, MSCPGate
@@ -218,14 +213,10 @@ def main():
                     help="Load predicted_train03.json. Default off; only useful for supervised_A.")
     ap.add_argument("--split_manifest", type=str, default=None,
                     help="Path to JSON manifest from src.dataloaders.make_split. "
-                         "If given, training uses dialogues from manifest['train_shards'].")
+                         "If given, training uses ALL dialogues from manifest['train_shards'] "
+                         "(overrides legacy first-100-of-train_00/01 loading).")
     ap.add_argument("--image_map_jsonl", type=str,
                     default="data/photochat/train_image_photo_desc.jsonl")
-    ap.add_argument("--turn_window", type=str, default=TURN_WINDOW_FULL,
-                    choices=TURN_WINDOW_CHOICES,
-                    help="Which dialogue turns to train on. full keeps all turns; "
-                         "preveal keeps only turns before the first share_photo=True "
-                         "event (before the image is shown).")
 
     args = ap.parse_args()
 
@@ -237,7 +228,7 @@ def main():
     use_predicted = args.use_predicted_labels or needs_labels
 
     if args.split_manifest:
-        # Full-data path with explicit train shard list.
+        # NEW: full-data path with explicit train shard list
         import json as _json
         with open(args.split_manifest) as _f:
             _manifest = _json.load(_f)
@@ -251,7 +242,6 @@ def main():
             image_map_jsonl=args.image_map_jsonl,
             shard_files=train_shard_paths,
             max_items=args.max_items,
-            turn_window=args.turn_window,
         )
     else:
         ds = PhotoChatDataset(
@@ -260,24 +250,10 @@ def main():
             image_map_jsonl=args.image_map_jsonl,
             use_human=True,
             use_predicted=use_predicted,
+            human_limit_per_file=100,
             max_items=args.max_items,
-            turn_window=args.turn_window,
         )
-    print(f"[train] turn_window: {args.turn_window}")
     print(f"[train] dataset size: {len(ds)} dialogues")
-
-    if args.gate_variant == "supervised_A":
-        n_labeled = sum(
-            any(y is not None for y in ex.get("repair_targets", []))
-            for ex in ds.items
-        )
-        if n_labeled == 0:
-            raise RuntimeError(
-                "supervised_A requires turn-level repair labels, but the loaded "
-                "PhotoChatDataset has none. Provide labeled shards or enable a "
-                "valid pseudo-labeled file with --use_predicted_labels."
-            )
-        print(f"[train] labeled dialogues for supervised_A: {n_labeled}")
 
     dl = DataLoader(
         ds,

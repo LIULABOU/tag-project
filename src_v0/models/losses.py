@@ -46,11 +46,10 @@ def stab_switch_loss(
         L_stab   = sum_{t>=2} (1 - rho_t) * KL(e_{t-1} || e_t)
         L_switch = sum_{t>=2}     rho_t   * max(0, delta - KL(e_{t-1} || e_t))
 
-    IMPORTANT: rho_t is detached only when used as the explicit weighting term.
-    Gradients can still reach rho_t indirectly through e_t, since e_t is computed
-    from the non-detached gate. This prevents the auxiliary loss from directly
-    optimizing the mask weights while still allowing the state-transition dynamics
-    to receive gradients.
+    IMPORTANT: by default rho_t is DETACHED when used as the (1-rho)/rho weight.
+    This treats rho as a regulator/mask whose role is to "select which loss is
+    active on this turn" -- it should NOT be trained by these losses themselves
+    (rho is trained by L_repair for supervised_A, or by L_rate for DCP).
 
     Without detach, gradient would flow:
         L_stab -> (1-rho) -> rho -> d_t -> e_hat_t -> Wa_text
